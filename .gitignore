@@ -1,2 +1,8 @@
 # Private planning notes (design doc snapshots etc.) — never committed
 .private/
+
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+.DS_Store
