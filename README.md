@@ -73,7 +73,7 @@ A few rules, all enforced by `npm run validate`:
 - `pop` is between 0 and 1. The order matters more than the exact numbers.
 - An alias can't match another answer's actual name. Two answers can share an alias (both Bushes answer to "Bush"), and the validator lists those so you can check they're intentional.
 
-There are 20 questions to start with, four per tier, which is enough for plenty of different rounds.
+There are 60 questions so far, twelve per tier, covering everything from US states and Pixar films to Pokémon types and the Spice Girls.
 
 ## Project layout
 
