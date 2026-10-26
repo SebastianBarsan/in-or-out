@@ -12,6 +12,14 @@ export interface PredictorConfig {
   recencyStep: number
   /** Confidence after k answers. */
   confidence: (k: number) => number
+  /** How much each older round counts relative to the one after it. */
+  careerDecay: number
+  /** Rounds of history at which the career read reaches half its full strength. */
+  careerHalfRounds: number
+  /** Most observations the career read can count as at the start of a round. */
+  careerMaxWeight: number
+  /** Most answers' worth of confidence the career read can add before Q1. */
+  careerMaxHeadStart: number
 }
 
 export const DEFAULT_CONFIG: PredictorConfig = {
@@ -20,18 +28,70 @@ export const DEFAULT_CONFIG: PredictorConfig = {
   spreadFloor: 0.15,
   recencyStep: 0.25,
   confidence: (k) => k / (k + 1),
+  careerDecay: 0.9,
+  careerHalfRounds: 3,
+  careerMaxWeight: 3,
+  careerMaxHeadStart: 1,
+}
+
+/** What the model carries over about the player from earlier rounds. */
+export interface Career {
+  /** Long-run niche score, used as this round's prior. */
+  niche: number
+  /** Long-run spread, used until the round has its own. */
+  spread: number
+  /** How many observations the prior counts as. */
+  weight: number
+  /** Answers' worth of confidence the model starts the round with. */
+  headStart: number
 }
 
 /** What the model has learned about the player this round. */
 export interface Profile {
   /** Rank percentile of each accepted answer so far, in order. */
   ranks: number[]
+  /** Read from earlier rounds; absent for a new player. */
+  career?: Career
 }
 
-export const emptyProfile = (): Profile => ({ ranks: [] })
+export const emptyProfile = (career?: Career): Profile => ({ ranks: [], career })
 
 export function recordAnswer(profile: Profile, rank: number): Profile {
-  return { ranks: [...profile.ranks, rank] }
+  return { ...profile, ranks: [...profile.ranks, rank] }
+}
+
+/**
+ * Builds the career read from past rounds' answer ranks, oldest first.
+ * Recent rounds count more, so a player who changes style is followed within a dozen or so rounds.
+ */
+export function careerFromHistory(history: number[][], config = DEFAULT_CONFIG): Career | undefined {
+  let total = config.priorNiche
+  let weight = 1
+  let squares = config.priorNiche ** 2
+  let rounds = 0
+  history.forEach((ranks, i) => {
+    const w = config.careerDecay ** (history.length - 1 - i)
+    if (ranks.length > 0) rounds += w
+    for (const r of ranks) {
+      total += w * r
+      squares += w * r * r
+      weight += w
+    }
+  })
+  if (rounds === 0) return undefined
+
+  const niche = total / weight
+  const spread = Math.max(Math.sqrt(Math.max(squares / weight - niche ** 2, 0)), config.spreadFloor)
+  const strength = rounds / (rounds + config.careerHalfRounds)
+  // An erratic history says little about the next answer, so it earns no head start.
+  // 0.5 is the spread of a player who swings between the two extremes.
+  const consistency = Math.max(0, 1 - (spread - config.spreadFloor) / (0.5 - config.spreadFloor))
+  return {
+    niche,
+    spread,
+    weight: 1 + (config.careerMaxWeight - 1) * strength,
+    headStart: config.careerMaxHeadStart * strength * consistency,
+  }
 }
 
 /**
@@ -46,10 +106,14 @@ export function rankPercentiles(question: Question): Map<string, number> {
   return new Map(sorted.map(({ answer }, i) => [answer.id, i / last]))
 }
 
-/** Weighted mean of recorded ranks, pulled toward the prior; later answers weigh a little more. */
+/**
+ * Weighted mean of recorded ranks, pulled toward the prior (the career read if there is one);
+ * later answers weigh a little more.
+ */
 export function nicheScore(profile: Profile, config = DEFAULT_CONFIG): number {
-  let total = config.priorNiche
-  let weight = 1
+  const { career } = profile
+  let weight = career?.weight ?? 1
+  let total = (career?.niche ?? config.priorNiche) * weight
   profile.ranks.forEach((r, i) => {
     const w = 1 + config.recencyStep * i
     total += w * r
@@ -58,12 +122,14 @@ export function nicheScore(profile: Profile, config = DEFAULT_CONFIG): number {
   return total / weight
 }
 
-/** Standard deviation of recorded ranks, never below the floor. */
+/** Standard deviation of recorded ranks, blended with the career spread, never below the floor. */
 export function spread(profile: Profile, config = DEFAULT_CONFIG): number {
-  const { ranks } = profile
-  if (ranks.length < 2) return config.spreadFloor
+  const { ranks, career } = profile
+  const prior = career?.spread ?? config.spreadFloor
+  if (ranks.length < 2) return Math.max(prior, config.spreadFloor)
   const mean = ranks.reduce((s, r) => s + r, 0) / ranks.length
-  const variance = ranks.reduce((s, r) => s + (r - mean) ** 2, 0) / ranks.length
+  let variance = ranks.reduce((s, r) => s + (r - mean) ** 2, 0) / ranks.length
+  if (career) variance = (career.weight * prior ** 2 + ranks.length * variance) / (career.weight + ranks.length)
   return Math.max(Math.sqrt(variance), config.spreadFloor)
 }
 
@@ -74,7 +140,7 @@ export function answerWeights(
   config = DEFAULT_CONFIG,
 ): { answer: Answer; weight: number }[] {
   const ranks = rankPercentiles(question)
-  const c = config.confidence(profile.ranks.length)
+  const c = config.confidence(profile.ranks.length + (profile.career?.headStart ?? 0))
   const n = nicheScore(profile, config)
   const s = spread(profile, config)
   return question.answers.map((answer) => {

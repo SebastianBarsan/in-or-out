@@ -1,10 +1,17 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { Answer, Question } from './engine/types'
 import { createRng, randomSeed } from './engine/rng'
 import { buildRound } from './engine/round'
-import { chooseGuess, emptyProfile, nicheScore, rankPercentiles, recordAnswer } from './engine/predictor'
+import {
+  careerFromHistory,
+  chooseGuess,
+  emptyProfile,
+  nicheScore,
+  rankPercentiles,
+  recordAnswer,
+} from './engine/predictor'
 import { QUESTIONS } from './data'
-import { loadRecentIds, loadStreak, logRound, rememberRound, saveStreak } from './storage'
+import { loadRankHistory, loadRecentIds, loadStreak, logRound, rememberRound, saveStreak } from './storage'
 import type { Turn } from './ui/turn'
 import { StartScreen } from './ui/StartScreen'
 import { QuestionScreen } from './ui/QuestionScreen'
@@ -21,11 +28,13 @@ export function App() {
   const [profile, setProfile] = useState(emptyProfile)
   // The guess is chosen here, in the event that moves to a new question, and never recomputed.
   const [current, setCurrent] = useState<{ index: number; guess: Answer } | null>(null)
+  // Re-read on every screen change so the start screen reflects the round just logged.
+  const career = useMemo(() => careerFromHistory(loadRankHistory()), [screen])
 
   const startRound = () => {
     const questions = buildRound(QUESTIONS, loadRecentIds(), rng)
     rememberRound(questions.map((q) => q.id))
-    const fresh = emptyProfile()
+    const fresh = emptyProfile(careerFromHistory(loadRankHistory()))
     setRound(questions)
     setTurns([])
     setProfile(fresh)
@@ -79,7 +88,7 @@ export function App() {
 
   return (
     <main className="app">
-      {screen === 'start' && <StartScreen streak={streak} onPlay={startRound} />}
+      {screen === 'start' && <StartScreen streak={streak} career={career} onPlay={startRound} />}
       {screen === 'play' && current && (
         <QuestionScreen
           key={round[current.index].id}

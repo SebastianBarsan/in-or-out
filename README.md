@@ -4,7 +4,7 @@ A small trivia game you win by being unpredictable.
 
 Each round is five questions like "Name a country in Africa" or "Name a member of the Beatles". Before you type anything, the app quietly locks in its guess of what you'll say and shows it as a face-down card. Then the card flips. If it guessed your answer, you're out. Get through all five and you're in.
 
-It isn't guessing blindly, though. It watches how you play during the round. Go with the obvious answers and it keeps guessing the obvious ones. Start digging up obscure ones and it follows you into the long tail. The questions also get narrower as you go, from 30-odd possible answers down to three or four, so the last couple are where it usually catches people.
+It isn't guessing blindly, though. It watches how you play, both this round and in the rounds before it. Go with the obvious answers and it keeps guessing the obvious ones. Start digging up obscure ones and it follows you into the long tail. The questions also get narrower as you go, from 30-odd possible answers down to three or four, so the last couple are where it usually catches people.
 
 ## Running it
 
@@ -23,10 +23,10 @@ Other scripts:
 | --- | --- |
 | `npm test` | Runs the unit tests for the game engine |
 | `npm run validate` | Checks `questions.json` for content mistakes |
-| `npm run simulate` | Plays thousands of rounds against scripted players and reports how often each one survives |
+| `npm run simulate` | Plays thousands of rounds against scripted players, as new and as returning players, and reports how often each one survives |
 | `npm run build` | Validates the questions, type-checks, and builds a static site into `dist/` |
 
-There's no backend. The build is plain static files, so it can go on GitHub Pages, Netlify, Vercel or anywhere else that serves HTML. Streaks and recently seen questions live in `localStorage`.
+There's no backend. The build is plain static files, so it can go on GitHub Pages, Netlify, Vercel or anywhere else that serves HTML. Streaks, recently seen questions and the round log behind the career read live in `localStorage`.
 
 ## How the guessing works
 
@@ -34,10 +34,16 @@ Every answer has a hand-set popularity score between 0 and 1. Within a question,
 
 After each of your answers, the app updates two numbers about you:
 
-- **Niche score**: roughly how obscure your answers tend to be. It starts at 0.25 and moves partway with each answer, so one weird pick doesn't throw it completely.
+- **Niche score**: roughly how obscure your answers tend to be. It starts from your career read (or 0.25 for a new player) and moves partway with each answer, so one weird pick doesn't throw it completely.
 - **Spread**: how consistent you are. Steady players get a tight aim, and erratic ones get a looser one.
 
-Each candidate answer gets a weight that blends "what most people would say" with "what this player tends to say". As the round goes on, the second part counts for more. The guess is then sampled from those weights rather than picked outright, so there's always some randomness and you can't game it perfectly.
+Each candidate answer gets a weight that blends "what most people would say" with "what this player tends to say". As the round goes on, the second part counts for more.
+
+### Career read
+
+Rounds don't start from scratch. Every finished round is logged locally (the last 200), and at the start of each round the app turns that log into a **career read**: your long-run niche score and spread, with recent rounds counting more (each older round counts 0.9× the one after it). So if you change style, it catches up within a dozen or so rounds.
+
+The career read is the round's starting point. It counts as up to three answers' worth of evidence, so the current round can still pull away from it. A consistent player also gives the app a head start of up to one answer's worth of confidence on Q1. An erratic history earns no head start, because it says little about what you'll pick next. The start screen shows your style once you have a history. The guess is then sampled from those weights rather than picked outright, so there's always some randomness and you can't game it perfectly.
 
 The guess is chosen before the input box unlocks and is never recomputed. The face-down card is the app showing it already committed.
 

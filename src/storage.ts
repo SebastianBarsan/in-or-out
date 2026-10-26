@@ -60,3 +60,9 @@ export interface RoundLog {
 export function logRound(entry: RoundLog): void {
   write(KEYS.log, [...read<RoundLog[]>(KEYS.log, []), entry].slice(-LOG_LIMIT))
 }
+
+/** Answer ranks from each logged round, oldest first. */
+export function loadRankHistory(): number[][] {
+  const log = read<RoundLog[]>(KEYS.log, [])
+  return Array.isArray(log) ? log.map((round) => (round.turns ?? []).map((t) => t.rank).filter(Number.isFinite)) : []
+}

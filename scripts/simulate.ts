@@ -1,10 +1,11 @@
-// Pits the predictor against scripted players and reports how often each one survives a round.
+// Pits the predictor against scripted players and reports how often each one survives a round,
+// both as a new player and as a returning one whose earlier rounds feed the career read.
 // Usage: npm run simulate [-- --rounds 20000 --seed 42]
 import type { Answer, Question, Rng } from '../src/engine/types'
 import { QUESTIONS } from '../src/data'
 import { createRng } from '../src/engine/rng'
 import { buildRound } from '../src/engine/round'
-import { chooseGuess, emptyProfile, rankPercentiles, recordAnswer } from '../src/engine/predictor'
+import { careerFromHistory, chooseGuess, emptyProfile, rankPercentiles, recordAnswer } from '../src/engine/predictor'
 
 type Player = (question: Question, turn: number, rng: Rng) => Answer
 
@@ -35,42 +36,59 @@ const seed = arg('seed', 42)
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`.padStart(6)
 
 console.log(`Simulating ${rounds} rounds per player (seed ${seed})\n`)
-console.log(`${'player'.padEnd(16)} ${'survive'.padStart(7)}   caught on Q1…Q5`)
+/** Matches the round log's limit in storage.ts. */
+const HISTORY_LIMIT = 200
 
-let anyExploit = false
-let totalSurvived = 0
-for (const [name, play] of Object.entries(PLAYERS)) {
-  const rng = createRng(seed)
-  const caughtAt = [0, 0, 0, 0, 0]
-  let survived = 0
-
-  for (let r = 0; r < rounds; r++) {
-    let profile = emptyProfile()
-    let caught = false
-    buildRound(QUESTIONS, new Set(), rng).forEach((question, turn) => {
-      if (caught) return
-      const guess = chooseGuess(question, profile, rng)
-      const answer = play(question, turn, rng)
-      if (answer.id === guess.id) {
-        caught = true
-        caughtAt[turn]++
-        return
-      }
-      profile = recordAnswer(profile, rankPercentiles(question).get(answer.id)!)
-    })
-    if (!caught) survived++
+/** Plays one round; returns the question the player was caught on (-1 if they survived) and their answer ranks. */
+function playRound(play: Player, rng: Rng, history: number[][] | null): { caughtAt: number; ranks: number[] } {
+  let profile = emptyProfile(history ? careerFromHistory(history) : undefined)
+  for (const [turn, question] of buildRound(QUESTIONS, new Set(), rng).entries()) {
+    const guess = chooseGuess(question, profile, rng)
+    const answer = play(question, turn, rng)
+    const rank = rankPercentiles(question).get(answer.id)!
+    profile = recordAnswer(profile, rank)
+    if (answer.id === guess.id) return { caughtAt: turn, ranks: profile.ranks }
   }
-
-  const rate = survived / rounds
-  totalSurvived += survived
-  const exploit = rate > EXPLOIT_THRESHOLD
-  anyExploit ||= exploit
-  const breakdown = caughtAt.map((n) => pct(n / rounds)).join(' ')
-  console.log(`${name.padEnd(16)} ${pct(rate)}   ${breakdown}${exploit ? '   ← beats the model too often' : ''}`)
+  return { caughtAt: -1, ranks: profile.ranks }
 }
 
-const overall = totalSurvived / (rounds * Object.keys(PLAYERS).length)
-console.log(`\nAverage survival: ${pct(overall).trim()} (target ${TARGET.map((t) => pct(t).trim()).join('–')})`)
+console.log(`${'player'.padEnd(16)} ${'mode'.padEnd(9)} ${'survive'.padStart(7)}   caught on Q1…Q5`)
+
+let anyExploit = false
+const totals = { new: 0, returning: 0 }
+for (const [name, play] of Object.entries(PLAYERS)) {
+  for (const mode of ['new', 'returning'] as const) {
+    const rng = createRng(seed)
+    const caughtAt = [0, 0, 0, 0, 0]
+    const history: number[][] = []
+    let survived = 0
+
+    for (let r = 0; r < rounds; r++) {
+      const result = playRound(play, rng, mode === 'returning' ? history : null)
+      if (result.caughtAt < 0) survived++
+      else caughtAt[result.caughtAt]++
+      if (mode === 'returning') {
+        history.push(result.ranks)
+        if (history.length > HISTORY_LIMIT) history.shift()
+      }
+    }
+
+    const rate = survived / rounds
+    totals[mode] += survived
+    const exploit = rate > EXPLOIT_THRESHOLD
+    anyExploit ||= exploit
+    const breakdown = caughtAt.map((n) => pct(n / rounds)).join(' ')
+    console.log(
+      `${name.padEnd(16)} ${mode.padEnd(9)} ${pct(rate)}   ${breakdown}${exploit ? '   ← beats the model too often' : ''}`,
+    )
+  }
+}
+
+const players = Object.keys(PLAYERS).length
+const target = TARGET.map((t) => pct(t).trim()).join('–')
+console.log(`
+Average survival: ${pct(totals.new / (rounds * players)).trim()} new, ` +
+  `${pct(totals.returning / (rounds * players)).trim()} returning (target ${target})`)
 if (anyExploit) {
   console.log(`At least one style survives more than ${EXPLOIT_THRESHOLD * 100}% of rounds: the model is too easy to exploit.`)
   process.exitCode = 1

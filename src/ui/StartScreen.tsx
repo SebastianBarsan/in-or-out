@@ -1,11 +1,20 @@
+import { describeRead } from '../engine/predictor'
+import type { Career, Read } from '../engine/predictor'
 import type { Streak } from '../storage'
 
 interface Props {
   streak: Streak
+  career?: Career
   onPlay: () => void
 }
 
-export function StartScreen({ streak, onPlay }: Props) {
+const STYLE_LABELS: Record<Read, string> = {
+  mainstream: 'Mainstream',
+  mixed: 'Mixed',
+  'deep-cut': 'Deep-cut',
+}
+
+export function StartScreen({ streak, career, onPlay }: Props) {
   return (
     <section className="screen start">
       <div className="logo" aria-hidden="true">
@@ -27,6 +36,12 @@ export function StartScreen({ streak, onPlay }: Props) {
           <dt>Best</dt>
           <dd>{streak.best}</dd>
         </div>
+        {career && (
+          <div>
+            <dt>Your style</dt>
+            <dd>{STYLE_LABELS[describeRead(career.niche)]}</dd>
+          </div>
+        )}
       </dl>
 
       <ol className="how">
