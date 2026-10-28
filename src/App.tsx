@@ -47,11 +47,32 @@ export function App() {
     const question = round[current.index]
     const rank = rankPercentiles(question).get(answer.id)!
     const next = recordAnswer(profile, rank)
+    const caught = answer.id === current.guess.id
+    const played = [...turns, { question, answer, guess: current.guess, rank, caught, nicheAfter: nicheScore(next) }]
     setProfile(next)
-    setTurns((prev) => [
-      ...prev,
-      { question, answer, guess: current.guess, rank, caught: answer.id === current.guess.id, nicheAfter: nicheScore(next) },
-    ])
+    setTurns(played)
+    // Save the outcome as soon as it's decided, so refreshing during the reveal can't undo an OUT.
+    if (caught || current.index === round.length - 1) finishRound(played, caught ? 'out' : 'in')
+  }
+
+  const finishRound = (played: Turn[], outcome: 'in' | 'out') => {
+    const updated =
+      outcome === 'in'
+        ? { current: streak.current + 1, best: Math.max(streak.best, streak.current + 1) }
+        : { current: 0, best: streak.best }
+    setStreak(updated)
+    saveStreak(updated)
+    logRound({
+      at: new Date().toISOString(),
+      outcome,
+      turns: played.map((t) => ({
+        question: t.question.id,
+        answer: t.answer.id,
+        rank: t.rank,
+        guess: t.guess.id,
+        caught: t.caught,
+      })),
+    })
   }
 
   const handleNext = () => {
@@ -63,25 +84,6 @@ export function App() {
       setCurrent({ index, guess: chooseGuess(round[index], profile, rng) })
       return
     }
-
-    const outcome = last.caught ? 'out' : 'in'
-    const updated =
-      outcome === 'in'
-        ? { current: streak.current + 1, best: Math.max(streak.best, streak.current + 1) }
-        : { current: 0, best: streak.best }
-    setStreak(updated)
-    saveStreak(updated)
-    logRound({
-      at: new Date().toISOString(),
-      outcome,
-      turns: turns.map((t) => ({
-        question: t.question.id,
-        answer: t.answer.id,
-        rank: t.rank,
-        guess: t.guess.id,
-        caught: t.caught,
-      })),
-    })
     setCurrent(null)
     setScreen('result')
   }
