@@ -55,6 +55,18 @@ export function App() {
     if (caught || current.index === round.length - 1) finishRound(played, caught ? 'out' : 'in')
   }
 
+  // Running out of time is an OUT. There's no answer to learn from, so the profile stays put.
+  const handleTimeout = () => {
+    if (!current) return
+    const question = round[current.index]
+    const played = [
+      ...turns,
+      { question, answer: null, guess: current.guess, rank: null, caught: true, nicheAfter: nicheScore(profile) },
+    ]
+    setTurns(played)
+    finishRound(played, 'out')
+  }
+
   const finishRound = (played: Turn[], outcome: 'in' | 'out') => {
     const updated =
       outcome === 'in'
@@ -67,7 +79,7 @@ export function App() {
       outcome,
       turns: played.map((t) => ({
         question: t.question.id,
-        answer: t.answer.id,
+        answer: t.answer?.id ?? null,
         rank: t.rank,
         guess: t.guess.id,
         caught: t.caught,
@@ -100,6 +112,7 @@ export function App() {
           guess={current.guess}
           turns={turns}
           onAnswer={handleAnswer}
+          onTimeout={handleTimeout}
           onNext={handleNext}
         />
       )}

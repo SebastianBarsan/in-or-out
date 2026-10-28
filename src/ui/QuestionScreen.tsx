@@ -5,9 +5,11 @@ import { validateAnswer } from '../engine/validate'
 import type { Turn } from './turn'
 import { FlipCard } from './FlipCard'
 import { ProgressDots } from './ProgressDots'
+import { TimerBar } from './TimerBar'
 
 const THINKING_MS = 900
 const FLIP_MS = 600
+const ANSWER_MS = 10_000
 
 type Phase = 'thinking' | 'answering' | 'flipping' | 'revealed'
 
@@ -19,14 +21,17 @@ interface Props {
   guess: Answer
   turns: Turn[]
   onAnswer: (answer: Answer) => void
+  /** The clock ran out before a valid answer went in. */
+  onTimeout: () => void
   onNext: () => void
 }
 
-export function QuestionScreen({ question, index, total, guess, turns, onAnswer, onNext }: Props) {
+export function QuestionScreen({ question, index, total, guess, turns, onAnswer, onTimeout, onNext }: Props) {
   const [phase, setPhase] = useState<Phase>('thinking')
   const [input, setInput] = useState('')
   const [error, setError] = useState<{ message: string; nonce: number } | null>(null)
   const [answer, setAnswer] = useState<Answer | null>(null)
+  const [timedOut, setTimedOut] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const nextRef = useRef<HTMLButtonElement>(null)
 
@@ -61,7 +66,15 @@ export function QuestionScreen({ question, index, total, guess, turns, onAnswer,
     setPhase('flipping')
   }
 
-  const caught = answer !== null && answer.id === guess.id
+  const expire = () => {
+    if (phase !== 'answering') return
+    setError(null)
+    setTimedOut(true)
+    onTimeout()
+    setPhase('flipping')
+  }
+
+  const caught = timedOut || (answer !== null && answer.id === guess.id)
   const isLast = index === total - 1
   const revealed = phase === 'revealed'
 
@@ -79,16 +92,17 @@ export function QuestionScreen({ question, index, total, guess, turns, onAnswer,
       <div className="table">
         <span aria-hidden="true" />
         <FlipCard thinking={phase === 'thinking'} flipped={phase === 'flipping' || revealed} guess={guess.name} />
-        {answer && (
+        {(answer || timedOut) && (
           <div className={`your-answer${revealed ? ' shown' : ''}`}>
             <span className="label">You said</span>
-            <span className="value">{answer.name}</span>
+            <span className="value">{answer ? answer.name : 'Nothing'}</span>
           </div>
         )}
       </div>
 
-      {!answer && (
+      {!answer && !timedOut && (
         <form className="answer-form" onSubmit={submit}>
+          <TimerBar durationMs={ANSWER_MS} running={phase === 'answering'} onExpire={expire} />
           <input
             ref={inputRef}
             // Remounting on each error restarts the shake animation; autoFocus keeps the keyboard up.
@@ -125,7 +139,7 @@ export function QuestionScreen({ question, index, total, guess, turns, onAnswer,
         <div className={`verdict ${caught ? 'out' : 'safe'}`}>
           <p className="verdict-word">{caught ? 'OUT' : 'Safe'}</p>
           <p className="verdict-detail">
-            {caught ? 'I had you. Same answer.' : isLast ? 'You dodged every guess.' : 'Different answers. On you go.'}
+            {timedOut ? "Time's up." : caught ? 'I had you. Same answer.' : isLast ? 'You dodged every guess.' : 'Different answers. On you go.'}
           </p>
           <button ref={nextRef} className="btn btn-primary" onClick={onNext}>
             {caught || isLast ? 'See result' : 'Next question'}

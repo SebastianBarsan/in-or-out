@@ -383,6 +383,23 @@ input {
   overflow-wrap: anywhere;
 }
 
+/* Answer timer */
+
+.timer {
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.timer-fill {
+  width: calc(var(--left) * 100%);
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--safe) calc(var(--left) * 100%), var(--out));
+}
+
 /* Answer form */
 
 .answer-form {

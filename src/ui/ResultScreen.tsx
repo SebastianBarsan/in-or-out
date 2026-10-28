@@ -19,7 +19,7 @@ const READ_PHRASES: Record<Read, string> = {
 /** One line on how the model read the player, e.g. "After Q2 I had you down as a deep-cut player." */
 export function modelReadLine(turns: Turn[]): string {
   if (turns.length === 0) return ''
-  if (turns.length === 1 && turns[0].caught) return "You went with the one I expected. I didn't even need a read on you."
+  if (turns.length === 1 && turns[0].caught && turns[0].answer) return "You went with the one I expected. I didn't even need a read on you."
 
   const reads = turns.map((t) => describeRead(t.nicheAfter))
   const final = reads[reads.length - 1]
@@ -35,7 +35,11 @@ export function ResultScreen({ turns, total, streak, onPlayAgain }: Props) {
     <section className="screen result">
       <p className={`outcome ${out ? 'out' : 'in'}`}>{out ? 'OUT' : 'IN'}</p>
       <p className="outcome-detail">
-        {out ? `Caught on question ${turns.length}.` : `You survived all ${total} questions.`}
+        {out
+          ? turns[turns.length - 1].answer
+            ? `Caught on question ${turns.length}.`
+            : `Ran out of time on question ${turns.length}.`
+          : `You survived all ${total} questions.`}
       </p>
 
       <p className="read-line">“{modelReadLine(turns)}”</p>
@@ -48,7 +52,7 @@ export function ResultScreen({ turns, total, streak, onPlayAgain }: Props) {
             </span>
             <span className="recap-pair">
               <span>
-                <span className="recap-label">You</span> {t.answer.name}
+                <span className="recap-label">You</span> {t.answer ? t.answer.name : 'Out of time'}
               </span>
               <span>
                 <span className="recap-label">Me</span> {t.guess.name}

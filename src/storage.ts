@@ -54,7 +54,8 @@ export function rememberRound(questionIds: string[]): void {
 export interface RoundLog {
   at: string
   outcome: 'in' | 'out'
-  turns: { question: string; answer: string; rank: number; guess: string; caught: boolean }[]
+  /** `answer` and `rank` are null when the player ran out of time. */
+  turns: { question: string; answer: string | null; rank: number | null; guess: string; caught: boolean }[]
 }
 
 export function logRound(entry: RoundLog): void {
@@ -64,5 +65,5 @@ export function logRound(entry: RoundLog): void {
 /** Answer ranks from each logged round, oldest first. */
 export function loadRankHistory(): number[][] {
   const log = read<RoundLog[]>(KEYS.log, [])
-  return Array.isArray(log) ? log.map((round) => (round.turns ?? []).map((t) => t.rank).filter(Number.isFinite)) : []
+  return Array.isArray(log) ? log.map((round) => (round.turns ?? []).map((t) => t.rank).filter((r): r is number => Number.isFinite(r))) : []
 }
