@@ -6,6 +6,7 @@ import type { Turn } from './turn'
 import { FlipCard } from './FlipCard'
 import { ProgressDots } from './ProgressDots'
 import { TimerBar } from './TimerBar'
+import { playOut, playSafe } from './sound'
 
 const THINKING_MS = 900
 const FLIP_MS = 600
@@ -77,6 +78,11 @@ export function QuestionScreen({ question, index, total, guess, turns, onAnswer,
   const caught = timedOut || (answer !== null && answer.id === guess.id)
   const isLast = index === total - 1
   const revealed = phase === 'revealed'
+
+  useEffect(() => {
+    if (revealed) (caught ? playOut : playSafe)()
+    // Only on the reveal itself; `caught` is settled by then.
+  }, [revealed])
 
   return (
     <section className="screen play">
