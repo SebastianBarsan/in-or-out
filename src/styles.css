@@ -561,6 +561,123 @@ input {
   margin-right: 4px;
 }
 
+/* Mode tabs */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.tab {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tab:focus-visible,
+.choice:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* Head-to-head */
+
+.btn-quiet {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Beats `.start .btn`, which sizes the Play button. */
+.start .answer-form .btn {
+  padding: 12px 28px;
+  font-size: 1rem;
+}
+
+.h2h-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.h2h-offline {
+  margin: 0 0 16px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.share-link {
+  width: 100%;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.choice:hover {
+  border-color: var(--accent);
+}
+
+.choice-prompt {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.choice-preview {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.h2h-outcome {
+  font-size: clamp(2.6rem, 13vw, 4rem);
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.outcome.draw {
+  color: var(--muted);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

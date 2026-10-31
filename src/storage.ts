@@ -5,10 +5,13 @@ const KEYS = {
   streak: 'in-or-out:streak',
   recent: 'in-or-out:recent-rounds',
   log: 'in-or-out:round-log',
+  seats: 'in-or-out:h2h-seats',
+  name: 'in-or-out:h2h-name',
 }
 
 const RECENT_ROUNDS = 3
 const LOG_LIMIT = 200
+const SEATS_LIMIT = 20
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -60,6 +63,48 @@ export interface RoundLog {
 
 export function logRound(entry: RoundLog): void {
   write(KEYS.log, [...read<RoundLog[]>(KEYS.log, []), entry].slice(-LOG_LIMIT))
+}
+
+/** A head-to-head seat on this device, so refreshing or reopening the link gets back in. */
+interface Seat {
+  token: string
+  /** How many of the game's reveals this device has already shown. */
+  seen: number
+}
+
+function loadSeats(): Record<string, Seat> {
+  return read<Record<string, Seat>>(KEYS.seats, {})
+}
+
+function saveSeat(gameId: string, seat: Seat): void {
+  // Insertion order is oldest first, so the slice drops the games played longest ago.
+  const others = Object.entries(loadSeats()).filter(([id]) => id !== gameId)
+  write(KEYS.seats, Object.fromEntries([...others, [gameId, seat]].slice(-SEATS_LIMIT)))
+}
+
+export function loadSeatToken(gameId: string): string | null {
+  return loadSeats()[gameId]?.token ?? null
+}
+
+export function saveSeatToken(gameId: string, token: string): void {
+  saveSeat(gameId, { token, seen: 0 })
+}
+
+export function loadSeenReveals(gameId: string): number {
+  return loadSeats()[gameId]?.seen ?? 0
+}
+
+export function saveSeenReveals(gameId: string, seen: number): void {
+  const seat = loadSeats()[gameId]
+  if (seat) saveSeat(gameId, { ...seat, seen })
+}
+
+export function loadPlayerName(): string {
+  return read<string>(KEYS.name, '')
+}
+
+export function savePlayerName(name: string): void {
+  write(KEYS.name, name)
 }
 
 /** Answer ranks from each logged round, oldest first. */

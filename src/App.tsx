@@ -13,6 +13,7 @@ import {
 import { QUESTIONS } from './data'
 import { loadRankHistory, loadRecentIds, loadStreak, logRound, rememberRound, saveStreak } from './storage'
 import type { Turn } from './ui/turn'
+import { HeadToHead } from './ui/h2h/HeadToHead'
 import { StartScreen } from './ui/StartScreen'
 import { QuestionScreen } from './ui/QuestionScreen'
 import { ResultScreen } from './ui/ResultScreen'
@@ -30,6 +31,16 @@ export function App() {
   const [current, setCurrent] = useState<{ index: number; guess: Answer } | null>(null)
   // Re-read on every screen change so the start screen reflects the round just logged.
   const career = useMemo(() => careerFromHistory(loadRankHistory()), [screen])
+  // A head-to-head game lives in the URL, so the link is both the invite and the way back in.
+  const [gameId, setGameId] = useState(() => new URLSearchParams(location.search).get('game'))
+
+  const openGame = (id: string | null) => {
+    const url = new URL(location.href)
+    if (id) url.searchParams.set('game', id)
+    else url.searchParams.delete('game')
+    history.replaceState(null, '', url)
+    setGameId(id)
+  }
 
   const startRound = () => {
     const questions = buildRound(QUESTIONS, loadRecentIds(), rng)
@@ -100,9 +111,17 @@ export function App() {
     setScreen('result')
   }
 
+  if (gameId) {
+    return (
+      <main className="app">
+        <HeadToHead key={gameId} gameId={gameId} onLeave={() => openGame(null)} onSwitchGame={openGame} />
+      </main>
+    )
+  }
+
   return (
     <main className="app">
-      {screen === 'start' && <StartScreen streak={streak} career={career} onPlay={startRound} />}
+      {screen === 'start' && <StartScreen streak={streak} career={career} onPlay={startRound} onGameCreated={openGame} />}
       {screen === 'play' && current && (
         <QuestionScreen
           key={round[current.index].id}

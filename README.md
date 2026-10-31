@@ -26,7 +26,21 @@ Other scripts:
 | `npm run simulate` | Plays thousands of rounds against scripted players, as new and as returning players, and reports how often each one survives |
 | `npm run build` | Validates the questions, type-checks, and builds a static site into `dist/` |
 
-There's no backend. The build is plain static files, so it can go on GitHub Pages, Netlify, Vercel or anywhere else that serves HTML. Streaks, recently seen questions and the round log behind the career read live in `localStorage`.
+Solo needs no backend. The build is plain static files, so it can go on GitHub Pages, Netlify, Vercel or anywhere else that serves HTML. Streaks, recently seen questions and the round log behind the career read live in `localStorage`.
+
+## Playing a friend
+
+The **Compete with friends** tab is head-to-head: you take turns picking a question and secretly predicting the other player's answer. Catch them and you win, but a catch by whoever set first earns a reply turn, and a catch back goes to sudden death. Each player uses their own device, joined by a share link, with no accounts.
+
+This mode needs a small Supabase project to hold the games. On the free plan:
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Paste [`supabase/migrations/20261030000000_head_to_head.sql`](supabase/migrations/20261030000000_head_to_head.sql) into its SQL Editor and run it.
+3. Copy `.env.example` to `.env` and fill in the project URL and anon key from its API settings. Set the same two variables on your host if you deploy the site, since they're read at build time.
+
+Without those variables, Solo works as normal and the tab says head-to-head isn't set up.
+
+A locked prediction is held only in the database, and the database functions are the only way in, so it never reaches the answerer's device before the reveal. The server also enforces the 10-second clock. Both devices check for changes every 3 seconds and get a realtime nudge to make turns feel instant.
 
 ## How the guessing works
 
@@ -86,9 +100,11 @@ There are 60 questions so far, twelve per tier, covering everything from US stat
 ```
 src/
   engine/     game logic: round building, answer matching, the predictor (no React)
-  ui/         start, question and result screens, plus the flip card
+  h2h/        head-to-head's connection to the backend
+  ui/         start, question and result screens, plus the flip card; ui/h2h/ has the head-to-head screens
   data/       questions.json
 scripts/      content validation and the balance simulator
+supabase/     head-to-head's database schema and rules, with tests that run them on an in-process Postgres
 ```
 
 The engine takes a seedable random-number generator, which keeps the tests and the simulator deterministic.
