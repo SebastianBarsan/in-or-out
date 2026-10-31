@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
 import type { Answer, Question } from '../engine/types'
-import { validateAnswer } from '../engine/validate'
 import type { Turn } from './turn'
+import { AnswerForm } from './AnswerForm'
 import { FlipCard } from './FlipCard'
 import { ProgressDots } from './ProgressDots'
-import { TimerBar } from './TimerBar'
 import { playOut, playSafe } from './sound'
 
 const THINKING_MS = 900
@@ -29,11 +27,8 @@ interface Props {
 
 export function QuestionScreen({ question, index, total, guess, turns, onAnswer, onTimeout, onNext }: Props) {
   const [phase, setPhase] = useState<Phase>('thinking')
-  const [input, setInput] = useState('')
-  const [error, setError] = useState<{ message: string; nonce: number } | null>(null)
   const [answer, setAnswer] = useState<Answer | null>(null)
   const [timedOut, setTimedOut] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
   const nextRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -41,7 +36,6 @@ export function QuestionScreen({ question, index, total, guess, turns, onAnswer,
       const t = setTimeout(() => setPhase('answering'), THINKING_MS)
       return () => clearTimeout(t)
     }
-    if (phase === 'answering') inputRef.current?.focus()
     if (phase === 'flipping') {
       const t = setTimeout(() => setPhase('revealed'), FLIP_MS)
       return () => clearTimeout(t)
@@ -49,27 +43,14 @@ export function QuestionScreen({ question, index, total, guess, turns, onAnswer,
     if (phase === 'revealed') nextRef.current?.focus()
   }, [phase])
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    if (phase !== 'answering') return
-    const result = validateAnswer(question, input)
-    if (result.kind === 'invalid') {
-      setError({ message: 'Not a valid answer — try again', nonce: Date.now() })
-      return
-    }
-    if (result.kind === 'ambiguous') {
-      setError({ message: 'That could be more than one answer — be more specific', nonce: Date.now() })
-      return
-    }
-    setError(null)
-    setAnswer(result.answer)
-    onAnswer(result.answer)
+  const accept = (accepted: Answer) => {
+    setAnswer(accepted)
+    onAnswer(accepted)
     setPhase('flipping')
   }
 
   const expire = () => {
     if (phase !== 'answering') return
-    setError(null)
     setTimedOut(true)
     onTimeout()
     setPhase('flipping')
@@ -107,38 +88,14 @@ export function QuestionScreen({ question, index, total, guess, turns, onAnswer,
       </div>
 
       {!answer && !timedOut && (
-        <form className="answer-form" onSubmit={submit}>
-          <TimerBar durationMs={ANSWER_MS} running={phase === 'answering'} onExpire={expire} />
-          <input
-            ref={inputRef}
-            // Remounting on each error restarts the shake animation; autoFocus keeps the keyboard up.
-            key={error?.nonce}
-            autoFocus={phase === 'answering'}
-            className={`answer-input${error ? ' shake' : ''}`}
-            type="text"
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value)
-              if (error) setError(null)
-            }}
-            disabled={phase !== 'answering'}
-            placeholder={phase === 'thinking' ? 'Locking in…' : 'Your answer'}
-            aria-label="Your answer"
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? 'answer-error' : undefined}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="go"
-          />
-          <button className="btn btn-primary" type="submit" disabled={phase !== 'answering' || !input.trim()}>
-            Submit
-          </button>
-          <p className="error" id="answer-error" role="alert">
-            {error?.message}
-          </p>
-        </form>
+        <AnswerForm
+          question={question}
+          active={phase === 'answering'}
+          timerMs={ANSWER_MS}
+          onExpire={expire}
+          onAccept={accept}
+          placeholder={phase === 'thinking' ? 'Locking in…' : 'Your answer'}
+        />
       )}
 
       {revealed && (
