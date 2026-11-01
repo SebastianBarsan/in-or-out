@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { previewAnswers, seedFrom } from '../../engine/headToHead'
+import { exampleAnswer, seedFrom } from '../../engine/headToHead'
 import { createRng } from '../../engine/rng'
 import type { GameView } from '../../h2h/api'
 import { nameOf, questionById } from './lookup'
@@ -16,7 +16,7 @@ export function ChooseScreen({ view, onChoose }: Props) {
       view.choices.flatMap((id) => {
         const question = questionById(id)
         if (!question) return []
-        return [{ question, preview: previewAnswers(question, createRng(seedFrom(`${view.id}:${view.turn}:${id}`))) }]
+        return [{ question, example: exampleAnswer(question, createRng(seedFrom(`${view.id}:${view.turn}:${id}`))) }]
       }),
     [view.id, view.turn, choices],
   )
@@ -28,12 +28,12 @@ export function ChooseScreen({ view, onChoose }: Props) {
       </p>
       <h2 className="prompt">{nameOf(view, view.setter)}, pick a question</h2>
       <ul className="choices">
-        {cards.map(({ question, preview }) => (
+        {cards.map(({ question, example }) => (
           <li key={question.id}>
             <button className="choice" onClick={() => onChoose(question.id)}>
               <span className="choice-prompt">{question.prompt}</span>
               <span className="badge">{question.answers.length} possible answers</span>
-              <span className="choice-preview">{preview.map((a) => a.name).join(' · ')}</span>
+              <span className="choice-example">ex. {example.name}</span>
             </button>
           </li>
         ))}

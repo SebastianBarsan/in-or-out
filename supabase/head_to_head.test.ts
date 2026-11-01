@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-const MIGRATION = readFileSync(new URL('./migrations/20261030000000_head_to_head.sql', import.meta.url), 'utf8')
+const MIGRATIONS = ['20261030000000_head_to_head.sql', '20261031000000_h2h_shrinking_choices.sql'].map((file) =>
+  readFileSync(new URL(`./migrations/${file}`, import.meta.url), 'utf8'),
+)
 const POOL = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10']
 
 interface View {
@@ -55,7 +57,7 @@ async function playTurn(game: { id: string; tokens: Record<string, string> }, an
 beforeAll(async () => {
   db = new PGlite()
   await db.exec(`create role anon nologin; create role authenticated nologin;`)
-  await db.exec(MIGRATION)
+  for (const migration of MIGRATIONS) await db.exec(migration)
   await db.exec('set role anon')
 }, 60_000)
 
@@ -112,6 +114,31 @@ describe('turn rules', () => {
     expect(after.setter).toBe('guest')
     expect(after.turn).toBe(2)
     expect(after.history[0]).toMatchObject({ caught: false, answer: 'other', prediction: 'p', outcome: 'continue' })
+  })
+
+  it('works down a full pool in 10 turns, with close choices that never come back', async () => {
+    // Named so the position in the pool, which is sorted by answer count, can be read back.
+    const pool = Array.from({ length: 60 }, (_, i) => `q${i}`)
+    const position = (id: string) => Number(id.slice(1))
+    const game = await start(pool)
+    const offered: number[][] = []
+    let view = await call('h2h_get_game', game.id, game.tokens.host)
+    for (let turn = 1; turn <= 10; turn++) {
+      const seat = game.tokens[view.setter]
+      const { choices } = await call('h2h_get_game', game.id, seat)
+      offered.push(choices.map(position))
+      expect(choices).toHaveLength(3)
+      view = await playTurn(game, 'other')
+    }
+    for (const choices of offered) expect(Math.max(...choices) - Math.min(...choices)).toBeLessThan(8)
+    for (let i = 1; i < offered.length; i++) {
+      expect(Math.max(...offered[i])).toBeLessThan(Math.min(...offered[i - 1]))
+    }
+    expect(Math.min(...offered[0])).toBeGreaterThanOrEqual(50)
+    expect(Math.max(...offered[9])).toBeLessThan(8)
+    expect(view.status).toBe('finished')
+    expect(view.history).toHaveLength(10)
+    expect(view.history[9].outcome).toBe('draw')
   })
 
   it('rejects a question outside the choices and a setter from the wrong side', async () => {

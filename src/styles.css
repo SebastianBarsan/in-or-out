@@ -663,7 +663,7 @@ input {
   line-height: 1.25;
 }
 
-.choice-preview {
+.choice-example {
   color: var(--muted);
   font-size: 0.85rem;
 }

@@ -2,32 +2,25 @@ import type { Answer, Question, Rng } from './types'
 import { rankPercentiles } from './predictor'
 import { shuffle } from './rng'
 
-/** Settings from the design doc. The choices per turn and the 10 s timer live on the server. */
-export const POOL_SIZE = 10
-export const PREVIEW_SIZE = 6
+/** The share of a question's answers, most common first, that its example comes from. */
+export const EXAMPLE_SHARE = 0.25
 
-/** The questions one game draws its turns from. */
-export function drawPool(questions: readonly Question[], rng: Rng, size = POOL_SIZE): string[] {
+/**
+ * The questions one game draws its turns from, sorted by answer count. Each turn the server
+ * offers 3 from its own slice of this order, working down from the biggest questions.
+ */
+export function drawPool(questions: readonly Question[], rng: Rng): string[] {
   return shuffle(questions, rng)
-    .slice(0, size)
+    .sort((a, b) => a.answers.length - b.answers.length)
     .map((q) => q.id)
 }
 
-/**
- * The setter's sample of a question's answers: 2 common, 2 mid and 2 obscure, shuffled so the
- * setter has to judge popularity themselves. Smaller questions show everything they have.
- */
-export function previewAnswers(question: Question, rng: Rng, size = PREVIEW_SIZE): Answer[] {
-  if (question.answers.length <= size) return shuffle(question.answers, rng)
+/** An answer to show the setter as an example, picked from the question's more common ones. */
+export function exampleAnswer(question: Question, rng: Rng): Answer {
   const ranks = rankPercentiles(question)
   const sorted = [...question.answers].sort((a, b) => ranks.get(a.id)! - ranks.get(b.id)!)
-  const third = sorted.length / 3
-  const bands = [
-    sorted.slice(0, Math.floor(third)),
-    sorted.slice(Math.floor(third), Math.floor(2 * third)),
-    sorted.slice(Math.floor(2 * third)),
-  ]
-  return shuffle(bands.flatMap((band) => shuffle(band, rng).slice(0, size / 3)), rng)
+  const common = sorted.slice(0, Math.max(1, Math.ceil(sorted.length * EXAMPLE_SHARE)))
+  return common[Math.floor(rng() * common.length)]
 }
 
 /** Turns a string into an RNG seed (FNV-1a), so a preview stays the same across refreshes. */
