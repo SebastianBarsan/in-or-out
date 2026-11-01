@@ -1,15 +1,22 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { exampleAnswer, seedFrom } from '../../engine/headToHead'
 import { createRng } from '../../engine/rng'
 import type { GameView } from '../../h2h/api'
+import { TimerBar } from '../TimerBar'
 import { nameOf, questionById } from './lookup'
+import { useTurnClock } from './useTurnClock'
 
 interface Props {
   view: GameView
-  onChoose: (questionId: string) => void
+  /** Both resolve false if the move didn't reach the server. */
+  start: () => Promise<boolean>
+  onChoose: (questionId: string) => Promise<boolean>
+  onTimeout: () => void
 }
 
-export function ChooseScreen({ view, onChoose }: Props) {
+export function ChooseScreen({ view, start, onChoose, onTimeout }: Props) {
+  const [picking, setPicking] = useState(false)
+  const timerMs = useTurnClock(view.msLeft !== null, view.msLeft, start)
   const choices = view.choices.join()
   const cards = useMemo(
     () =>
@@ -21,16 +28,35 @@ export function ChooseScreen({ view, onChoose }: Props) {
     [view.id, view.turn, choices],
   )
 
+  if (timerMs === null) {
+    return (
+      <section className="screen h2h">
+        <p className="pitch" role="status">
+          Opening the turn…
+        </p>
+      </section>
+    )
+  }
+
   return (
     <section className="screen h2h">
       <p className="question-number">
         Turn {view.turn} · {view.poolSize} questions left{view.suddenDeath ? ' · Sudden death' : ''}
       </p>
       <h2 className="prompt">{nameOf(view, view.setter)}, pick a question</h2>
+      {/* Keeps draining during a pick: if the pick fails, the server's clock hasn't stopped either. */}
+      <TimerBar durationMs={timerMs} running onExpire={() => !picking && onTimeout()} />
       <ul className="choices">
         {cards.map(({ question, example }) => (
           <li key={question.id}>
-            <button className="choice" onClick={() => onChoose(question.id)}>
+            <button
+              className="choice"
+              disabled={picking}
+              onClick={async () => {
+                setPicking(true)
+                if (!(await onChoose(question.id))) setPicking(false)
+              }}
+            >
               <span className="choice-prompt">{question.prompt}</span>
               <span className="badge">{question.answers.length} possible answers</span>
               <span className="choice-example">ex. {example.name}</span>

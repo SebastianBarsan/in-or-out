@@ -15,6 +15,11 @@ export function drawPool(questions: readonly Question[], rng: Rng): string[] {
     .map((q) => q.id)
 }
 
+/** Each question's answer IDs, so the server can pick a prediction when a setter runs out of time. */
+export function answerIds(questions: readonly Question[]): Record<string, string[]> {
+  return Object.fromEntries(questions.map((q) => [q.id, q.answers.map((a) => a.id)]))
+}
+
 /** An answer to show the setter as an example, picked from the question's more common ones. */
 export function exampleAnswer(question: Question, rng: Rng): Answer {
   const ranks = rankPercentiles(question)

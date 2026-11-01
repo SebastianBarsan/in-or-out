@@ -1,9 +1,19 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { QUESTIONS } from '../../data'
-import { drawPool } from '../../engine/headToHead'
+import { answerIds, drawPool } from '../../engine/headToHead'
 import { createRng, randomSeed } from '../../engine/rng'
-import { isConfigured, joinGame, lockPrediction, rematch, startAnswer, submitAnswer } from '../../h2h/api'
+import {
+  isConfigured,
+  joinGame,
+  lockPrediction,
+  pickQuestion,
+  rematch,
+  setterTimeout,
+  startAnswer,
+  startChoosing,
+  submitAnswer,
+} from '../../h2h/api'
 import { useGame } from '../../h2h/useGame'
 import { loadSeatToken, loadSeenReveals, saveSeatToken, saveSeenReveals } from '../../storage'
 import { AnswerScreen } from './AnswerScreen'
@@ -25,7 +35,6 @@ interface Props {
 export function HeadToHead({ gameId, onLeave, onSwitchGame }: Props) {
   const [token, setToken] = useState(() => loadSeatToken(gameId))
   const [seen, setSeen] = useState(() => loadSeenReveals(gameId))
-  const [chosen, setChosen] = useState<{ turn: number; questionId: string } | null>(null)
   const { view, missing, offline, move, nudge } = useGame(gameId, token)
 
   const leave = (
@@ -89,7 +98,7 @@ export function HeadToHead({ gameId, onLeave, onSwitchGame }: Props) {
           view={view}
           leave={leave}
           onRematch={async () => {
-            const { id } = await rematch(gameId, token, drawPool(QUESTIONS, createRng(randomSeed())))
+            const { id } = await rematch(gameId, token, drawPool(QUESTIONS, createRng(randomSeed())), answerIds(QUESTIONS))
             saveSeatToken(id, token)
             nudge()
             onSwitchGame(id)
@@ -109,17 +118,29 @@ export function HeadToHead({ gameId, onLeave, onSwitchGame }: Props) {
       )
     }
     if (view.status === 'answering') return <WaitingScreen view={view} text={`${opponent} is answering…`} leave={leave} />
-    if (chosen?.turn === view.turn) {
+    const timeout = () => void move(() => setterTimeout(gameId, token, view.turn))
+    const { questionId } = view
+    if (questionId) {
       return (
         <PredictScreen
-          questionId={chosen.questionId}
+          key={view.turn}
+          questionId={questionId}
           opponent={opponent}
-          onBack={() => setChosen(null)}
-          onLock={(prediction) => move(() => lockPrediction(gameId, token, view.turn, chosen.questionId, prediction))}
+          msLeft={view.msLeft ?? 0}
+          onLock={(prediction) => move(() => lockPrediction(gameId, token, view.turn, questionId, prediction))}
+          onTimeout={timeout}
         />
       )
     }
-    return <ChooseScreen view={view} onChoose={(questionId) => setChosen({ turn: view.turn, questionId })} />
+    return (
+      <ChooseScreen
+        key={view.turn}
+        view={view}
+        start={() => move(() => startChoosing(gameId, token, view.turn))}
+        onChoose={(picked) => move(() => pickQuestion(gameId, token, view.turn, picked))}
+        onTimeout={timeout}
+      />
+    )
   }
 
   return (

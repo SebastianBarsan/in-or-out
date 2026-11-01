@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { GameView } from '../../h2h/api'
 import { AnswerForm } from '../AnswerForm'
 import { FlipCard } from '../FlipCard'
 import { nameOf, otherRole, questionById } from './lookup'
+import { useTurnClock } from './useTurnClock'
 
 interface Props {
   view: GameView
@@ -15,30 +16,7 @@ export function AnswerScreen({ view, start, submit }: Props) {
   // The answer waiting on the server. `undefined` means none yet; null means the clock ran out.
   const [pending, setPending] = useState<string | null | undefined>(undefined)
   const [failed, setFailed] = useState(false)
-  const opened = view.msLeft !== null && view.questionId !== null
-  // Only the first reading sets the timer. Later polls would otherwise keep restarting the bar.
-  const timerMs = useRef<number | null>(null)
-  if (opened && timerMs.current === null) timerMs.current = Math.max(view.msLeft!, 1)
-
-  const starting = useRef(false)
-  useEffect(() => {
-    if (opened) return
-    // A question arriving in a background tab mustn't start a clock nobody is watching.
-    const open = () => {
-      if (document.visibilityState !== 'visible' || starting.current) return
-      starting.current = true
-      void start().finally(() => {
-        starting.current = false
-      })
-    }
-    open()
-    const retry = setInterval(open, 2000)
-    document.addEventListener('visibilitychange', open)
-    return () => {
-      clearInterval(retry)
-      document.removeEventListener('visibilitychange', open)
-    }
-  }, [opened, start])
+  const timerMs = useTurnClock(view.msLeft !== null && view.questionId !== null, view.msLeft, start)
 
   const send = async (answer: string | null) => {
     setPending(answer)
@@ -49,7 +27,7 @@ export function AnswerScreen({ view, start, submit }: Props) {
   const question = view.questionId ? questionById(view.questionId) : undefined
   const setter = view.you ? nameOf(view, otherRole(view.you)) : ''
 
-  if (!question || timerMs.current === null) {
+  if (!question || timerMs === null) {
     return (
       <section className="screen play">
         <p className="pitch" role="status">
@@ -77,7 +55,7 @@ export function AnswerScreen({ view, start, submit }: Props) {
         <AnswerForm
           question={question}
           active
-          timerMs={timerMs.current}
+          timerMs={timerMs}
           onExpire={() => void send(null)}
           onAccept={(answer) => void send(answer.id)}
         />

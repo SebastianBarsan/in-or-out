@@ -36,12 +36,12 @@ export interface GameView {
   rematchId: string | null
   /** Setter only, while choosing. */
   choices: string[]
-  /** Setter once locked; answerer once their clock is running. */
+  /** Setter once picked; answerer once their clock is running. */
   questionId: string | null
   /** Setter only, and not until it's locked. The answerer sees it in `history` after the turn. */
   prediction: string | null
   answering: boolean
-  /** Answerer only. Relative rather than a timestamp, so device clocks don't matter. */
+  /** Only for the player whose clock is running. Relative rather than a timestamp, so device clocks don't matter. */
   msLeft: number | null
 }
 
@@ -66,13 +66,23 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   return data as T
 }
 
-export const createGame = (name: string, pool: string[]) =>
-  rpc<Seat>('h2h_create_game', { p_name: name, p_pool: pool })
+export const createGame = (name: string, pool: string[], answers: Record<string, string[]>) =>
+  rpc<Seat>('h2h_create_game', { p_name: name, p_pool: pool, p_answers: answers })
 
 export const joinGame = (game: string, name: string) => rpc<Seat>('h2h_join_game', { p_game: game, p_name: name })
 
 export const getGame = (game: string, token: string | null) =>
   rpc<GameView>('h2h_get_game', { p_game: game, p_token: token })
+
+export const startChoosing = (game: string, token: string, turn: number) =>
+  rpc<GameView>('h2h_start_choosing', { p_game: game, p_token: token, p_turn: turn })
+
+export const pickQuestion = (game: string, token: string, turn: number, question: string) =>
+  rpc<GameView>('h2h_pick_question', { p_game: game, p_token: token, p_turn: turn, p_question: question })
+
+/** The setter's clock ran out. The server fills in whatever is missing at random. */
+export const setterTimeout = (game: string, token: string, turn: number) =>
+  rpc<GameView>('h2h_setter_timeout', { p_game: game, p_token: token, p_turn: turn })
 
 export const lockPrediction = (game: string, token: string, turn: number, question: string, prediction: string) =>
   rpc<GameView>('h2h_lock_prediction', {
@@ -90,8 +100,8 @@ export const startAnswer = (game: string, token: string, turn: number) =>
 export const submitAnswer = (game: string, token: string, turn: number, answer: string | null) =>
   rpc<GameView>('h2h_submit_answer', { p_game: game, p_token: token, p_turn: turn, p_answer: answer })
 
-export const rematch = (game: string, token: string, pool: string[]) =>
-  rpc<{ id: string }>('h2h_rematch', { p_game: game, p_token: token, p_pool: pool })
+export const rematch = (game: string, token: string, pool: string[], answers: Record<string, string[]>) =>
+  rpc<{ id: string }>('h2h_rematch', { p_game: game, p_token: token, p_pool: pool, p_answers: answers })
 
 /**
  * A nudge between the two devices that something changed. It carries no game data: the receiver

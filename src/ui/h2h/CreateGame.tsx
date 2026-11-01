@@ -1,5 +1,5 @@
 import { QUESTIONS } from '../../data'
-import { drawPool } from '../../engine/headToHead'
+import { answerIds, drawPool } from '../../engine/headToHead'
 import { createRng, randomSeed } from '../../engine/rng'
 import { createGame, isConfigured } from '../../h2h/api'
 import { saveSeatToken } from '../../storage'
@@ -12,7 +12,7 @@ export function CreateGame({ onCreated }: { onCreated: (gameId: string) => void 
     <NameForm
       submitLabel="Create game"
       submit={async (name) => {
-        const seat = await createGame(name, drawPool(QUESTIONS, createRng(randomSeed())))
+        const seat = await createGame(name, drawPool(QUESTIONS, createRng(randomSeed())), answerIds(QUESTIONS))
         saveSeatToken(seat.id, seat.token)
         onCreated(seat.id)
       }}

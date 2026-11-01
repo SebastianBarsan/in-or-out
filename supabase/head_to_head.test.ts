@@ -4,10 +4,14 @@ import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-const MIGRATIONS = ['20261030000000_head_to_head.sql', '20261031000000_h2h_shrinking_choices.sql'].map((file) =>
-  readFileSync(new URL(`./migrations/${file}`, import.meta.url), 'utf8'),
-)
+const MIGRATIONS = [
+  '20261030000000_head_to_head.sql',
+  '20261031000000_h2h_shrinking_choices.sql',
+  '20261101000000_h2h_setter_clock.sql',
+].map((file) => readFileSync(new URL(`./migrations/${file}`, import.meta.url), 'utf8'))
 const POOL = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10']
+const ANSWERS = ['a1', 'a2', 'a3']
+const answersFor = (pool: string[]) => JSON.stringify(Object.fromEntries(pool.map((q) => [q, ANSWERS])))
 
 interface View {
   status: string
@@ -36,7 +40,7 @@ async function call<T = View>(fn: string, ...args: unknown[]): Promise<T> {
 
 /** A joined game: host sets first. */
 async function start(pool = POOL) {
-  const host = await call<{ id: string; token: string }>('h2h_create_game', 'Ann', pool)
+  const host = await call<{ id: string; token: string }>('h2h_create_game', 'Ann', pool, answersFor(pool))
   const guest = await call<{ id: string; token: string }>('h2h_join_game', host.id, 'Bo')
   return { id: host.id, tokens: { host: host.token, guest: guest.token } as Record<string, string> }
 }
@@ -305,20 +309,142 @@ describe('timer', () => {
   })
 })
 
+describe('setter clock', () => {
+  /** Sets how long is left on the server's clock, grace period included. */
+  async function windClock(id: string, left: string) {
+    await db.exec('reset role')
+    await db.query(`update h2h_private.games set deadline = now() + $2::interval where id = $1`, [id, left])
+    await db.exec('set role anon')
+  }
+  const expire = (id: string) => windClock(id, '-1 second')
+
+  async function opened() {
+    const game = await start()
+    const { host, guest } = game.tokens
+    return { game, host, guest, view: await call('h2h_start_choosing', game.id, host, 1) }
+  }
+
+  it('does not run until the setter opens the turn, and only for the setter', async () => {
+    const game = await start()
+    const { host, guest } = game.tokens
+    expect((await call('h2h_get_game', game.id, host)).msLeft).toBeNull()
+    await call('h2h_start_choosing', game.id, guest, 1)
+    expect((await call('h2h_get_game', game.id, host)).msLeft).toBeNull()
+    const view = await call('h2h_start_choosing', game.id, host, 1)
+    expect(view.msLeft).toBeGreaterThan(9000)
+    expect(view.msLeft).toBeLessThanOrEqual(10000)
+    expect((await call('h2h_get_game', game.id, guest)).msLeft).toBeNull()
+  })
+
+  it('does not restart when the setter opens the turn again', async () => {
+    const { game, host } = await opened()
+    await windClock(game.id, '3 seconds')
+    expect((await call('h2h_start_choosing', game.id, host, 1)).msLeft).toBeLessThan(3000)
+  })
+
+  it('picks a random question and answer if the setter picked nothing', async () => {
+    const { game, host, guest, view } = await opened()
+    await expire(game.id)
+    const after = await call('h2h_get_game', game.id, guest)
+    expect(after.status).toBe('answering')
+    const seen = await call('h2h_get_game', game.id, host)
+    expect(view.choices).toContain(seen.questionId)
+    expect(ANSWERS).toContain(seen.prediction)
+    expect(seen.poolSize).toBe(9)
+    expect(after.msLeft).toBeNull()
+  })
+
+  it('gives a fresh 10 seconds to predict after a pick, and hides the pick from the answerer', async () => {
+    const { game, host, guest, view } = await opened()
+    await windClock(game.id, '3 seconds')
+    const picked = await call('h2h_pick_question', game.id, host, 1, view.choices[0])
+    expect(picked.status).toBe('choosing')
+    expect(picked.questionId).toBe(view.choices[0])
+    expect(picked.msLeft).toBeGreaterThan(9000)
+    expect((await call('h2h_get_game', game.id, guest)).questionId).toBeNull()
+  })
+
+  it('keeps the picked question and picks a random answer if no prediction arrives', async () => {
+    const { game, host, view } = await opened()
+    await call('h2h_pick_question', game.id, host, 1, view.choices[1])
+    await expire(game.id)
+    const after = await call('h2h_get_game', game.id, host)
+    expect(after.status).toBe('answering')
+    expect(after.questionId).toBe(view.choices[1])
+    expect(ANSWERS).toContain(after.prediction)
+  })
+
+  it('does not let a second pick change the question or restart the clock', async () => {
+    const { game, host, view } = await opened()
+    await call('h2h_pick_question', game.id, host, 1, view.choices[0])
+    await windClock(game.id, '3 seconds')
+    const again = await call('h2h_pick_question', game.id, host, 1, view.choices[1])
+    expect(again.questionId).toBe(view.choices[0])
+    expect(again.msLeft).toBeLessThan(3000)
+    await expect(call('h2h_lock_prediction', game.id, host, 1, view.choices[1], 'p')).rejects.toThrow(/already picked/)
+  })
+
+  it('locks a typed prediction and hands over to the answerer with no clock running', async () => {
+    const { game, host, guest, view } = await opened()
+    await call('h2h_pick_question', game.id, host, 1, view.choices[0])
+    const locked = await call('h2h_lock_prediction', game.id, host, 1, view.choices[0], 'a2')
+    expect(locked.prediction).toBe('a2')
+    expect(locked.answering).toBe(false)
+    expect((await call('h2h_start_answer', game.id, guest, 1)).msLeft).toBeGreaterThan(9000)
+  })
+
+  it('ignores a late prediction once the random one is in', async () => {
+    const { game, host, view } = await opened()
+    await call('h2h_pick_question', game.id, host, 1, view.choices[0])
+    await expire(game.id)
+    const after = await call('h2h_lock_prediction', game.id, host, 1, view.choices[0], 'late')
+    expect(ANSWERS).toContain(after.prediction)
+  })
+
+  it('lets the setter report the timeout, but not the answerer', async () => {
+    const { game, host, guest } = await opened()
+    expect((await call('h2h_setter_timeout', game.id, guest, 1)).status).toBe('choosing')
+    const after = await call('h2h_setter_timeout', game.id, host, 1)
+    expect(after.status).toBe('answering')
+    expect(ANSWERS).toContain(after.prediction)
+    expect(JSON.stringify(await call('h2h_start_answer', game.id, guest, 1))).not.toContain(after.prediction!)
+  })
+
+  it('ignores a reported timeout before the clock has started', async () => {
+    const game = await start()
+    expect((await call('h2h_setter_timeout', game.id, game.tokens.host, 1)).status).toBe('choosing')
+  })
+
+  it('gives a game with no stored answers a stand-in prediction instead of stalling', async () => {
+    const { game, host } = await opened()
+    await db.exec('reset role')
+    await db.query(`update h2h_private.games set answers = '{}' where id = $1`, [game.id])
+    await db.exec('set role anon')
+    const after = await call('h2h_setter_timeout', game.id, host, 1)
+    expect(after.status).toBe('answering')
+    expect(after.prediction).toBe('no prediction')
+  })
+})
+
 describe('joining and rematch', () => {
   it('refuses a third player and bad names', async () => {
     const game = await start()
     await expect(call('h2h_join_game', game.id, 'Cy')).rejects.toThrow(/two players/)
-    await expect(call('h2h_create_game', '   ', POOL)).rejects.toThrow(/Name/)
-    await expect(call('h2h_create_game', 'x'.repeat(21), POOL)).rejects.toThrow(/Name/)
+    await expect(call('h2h_create_game', '   ', POOL, answersFor(POOL))).rejects.toThrow(/Name/)
+    await expect(call('h2h_create_game', 'x'.repeat(21), POOL, answersFor(POOL))).rejects.toThrow(/Name/)
+  })
+
+  it('refuses a pool with a question that has no answers', async () => {
+    await expect(call('h2h_create_game', 'Ann', ['q1', 'q2'], answersFor(['q1']))).rejects.toThrow(/Invalid answers/)
+    await expect(call('h2h_create_game', 'Ann', ['q1'], '{"q1":[]}')).rejects.toThrow(/Invalid answers/)
   })
 
   it('makes one rematch for both devices, with the other player setting first', async () => {
     const game = await start()
     await playTurn(game, 'other')
     await playTurn(game, 'p')
-    const a = await call<{ id: string }>('h2h_rematch', game.id, game.tokens.host, POOL)
-    const b = await call<{ id: string }>('h2h_rematch', game.id, game.tokens.guest, POOL)
+    const a = await call<{ id: string }>('h2h_rematch', game.id, game.tokens.host, POOL, answersFor(POOL))
+    const b = await call<{ id: string }>('h2h_rematch', game.id, game.tokens.guest, POOL, answersFor(POOL))
     expect(a.id).toBe(b.id)
     const fresh = await call('h2h_get_game', a.id, game.tokens.guest)
     expect(fresh.you).toBe('guest')
@@ -332,7 +458,7 @@ describe('joining and rematch', () => {
     const game = await start()
     await playTurn(game, 'other')
     await playTurn(game, 'p')
-    const { id } = await call<{ id: string }>('h2h_rematch', game.id, game.tokens.host, POOL)
+    const { id } = await call<{ id: string }>('h2h_rematch', game.id, game.tokens.host, POOL, answersFor(POOL))
     const next = { id, tokens: game.tokens }
     await playTurn(next, 'p')
     const end = await playTurn(next, 'other')
@@ -341,6 +467,6 @@ describe('joining and rematch', () => {
 
   it('refuses a rematch while the game is still going', async () => {
     const game = await start()
-    await expect(call('h2h_rematch', game.id, game.tokens.host, POOL)).rejects.toThrow(/still going/)
+    await expect(call('h2h_rematch', game.id, game.tokens.host, POOL, answersFor(POOL))).rejects.toThrow(/still going/)
   })
 })
