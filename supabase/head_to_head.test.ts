@@ -8,9 +8,11 @@ const MIGRATIONS = [
   '20261030000000_head_to_head.sql',
   '20261031000000_h2h_shrinking_choices.sql',
   '20261101000000_h2h_setter_clock.sql',
+  '20261102000000_h2h_check_answers.sql',
 ].map((file) => readFileSync(new URL(`./migrations/${file}`, import.meta.url), 'utf8'))
 const POOL = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10']
-const ANSWERS = ['a1', 'a2', 'a3']
+// 'p' is the prediction most tests lock, and 'other' the answer that dodges it.
+const ANSWERS = ['p', 'other', 'secret-answer', 'a1', 'a2', 'a3']
 const answersFor = (pool: string[]) => JSON.stringify(Object.fromEntries(pool.map((q) => [q, ANSWERS])))
 
 interface View {
@@ -185,6 +187,39 @@ describe('turn rules', () => {
     const again = await call('h2h_submit_answer', game.id, guest, 1, 'p')
     expect(again.history).toHaveLength(1)
     expect(again.history[0].caught).toBe(false)
+  })
+})
+
+describe('answer checks', () => {
+  it("refuses a prediction that is not one of the question's answers", async () => {
+    const game = await start()
+    const { host } = game.tokens
+    const { choices } = await call('h2h_get_game', game.id, host)
+    await expect(call('h2h_lock_prediction', game.id, host, 1, choices[0], 'made-up')).rejects.toThrow(/Not a valid answer/)
+    expect((await call('h2h_get_game', game.id, host)).status).toBe('choosing')
+  })
+
+  it("refuses an answer that is not one of the question's answers, and keeps the turn open", async () => {
+    const game = await start()
+    const { host, guest } = game.tokens
+    const { choices } = await call('h2h_get_game', game.id, host)
+    await call('h2h_lock_prediction', game.id, host, 1, choices[0], 'p')
+    await call('h2h_start_answer', game.id, guest, 1)
+    await expect(call('h2h_submit_answer', game.id, guest, 1, 'never-matches')).rejects.toThrow(/Not a valid answer/)
+    const after = await call('h2h_submit_answer', game.id, guest, 1, 'a1')
+    expect(after.history[0]).toMatchObject({ answer: 'a1', caught: false })
+  })
+
+  it('still takes any text in a game with no stored answers', async () => {
+    const game = await start()
+    const { host, guest } = game.tokens
+    await db.exec('reset role')
+    await db.query(`update h2h_private.games set answers = '{}' where id = $1`, [game.id])
+    await db.exec('set role anon')
+    const { choices } = await call('h2h_get_game', game.id, host)
+    await call('h2h_lock_prediction', game.id, host, 1, choices[0], 'anything')
+    await call('h2h_start_answer', game.id, guest, 1)
+    expect((await call('h2h_submit_answer', game.id, guest, 1, 'anything')).history[0].caught).toBe(true)
   })
 })
 
