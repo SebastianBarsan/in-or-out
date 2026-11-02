@@ -9,6 +9,11 @@ export function useTurnClock(opened: boolean, msLeft: number | null, start: () =
   const timerMs = useRef<number | null>(null)
   if (opened && timerMs.current === null) timerMs.current = Math.max(msLeft!, 1)
 
+  // Callers pass a fresh `start` on every render. Reading it from a ref keeps the effect from
+  // restarting, and firing an extra request, each time a poll re-renders the screen.
+  const startRef = useRef(start)
+  startRef.current = start
+
   const starting = useRef(false)
   useEffect(() => {
     if (opened) return
@@ -16,7 +21,7 @@ export function useTurnClock(opened: boolean, msLeft: number | null, start: () =
     const open = () => {
       if (document.visibilityState !== 'visible' || starting.current) return
       starting.current = true
-      void start().finally(() => {
+      void startRef.current().finally(() => {
         starting.current = false
       })
     }
@@ -27,7 +32,7 @@ export function useTurnClock(opened: boolean, msLeft: number | null, start: () =
       clearInterval(retry)
       document.removeEventListener('visibilitychange', open)
     }
-  }, [opened, start])
+  }, [opened])
 
   return timerMs.current
 }
