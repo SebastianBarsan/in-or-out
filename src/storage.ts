@@ -7,6 +7,7 @@ const KEYS = {
   log: 'in-or-out:round-log',
   seats: 'in-or-out:h2h-seats',
   name: 'in-or-out:h2h-name',
+  inProgress: 'in-or-out:round-in-progress',
 }
 
 const RECENT_ROUNDS = 3
@@ -27,6 +28,14 @@ function write(key: string, value: unknown): void {
     localStorage.setItem(key, JSON.stringify(value))
   } catch {
     // Storage unavailable: carry on without it.
+  }
+}
+
+function remove(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Storage unavailable: nothing was saved to remove.
   }
 }
 
@@ -63,6 +72,29 @@ export interface RoundLog {
 
 export function logRound(entry: RoundLog): void {
   write(KEYS.log, [...read<RoundLog[]>(KEYS.log, []), entry].slice(-LOG_LIMIT))
+}
+
+/** The round still being played: the turns answered so far, saved from the moment it starts. */
+export type RoundInProgress = Omit<RoundLog, 'outcome'>
+
+export function saveRoundInProgress(entry: RoundInProgress): void {
+  write(KEYS.inProgress, entry)
+}
+
+export function clearRoundInProgress(): void {
+  remove(KEYS.inProgress)
+}
+
+/**
+ * A round that was never finished, because the page was refreshed or closed mid-round, counts as
+ * an OUT. Otherwise reloading on a hard question would dodge it. Run once when the app loads.
+ */
+export function settleAbandonedRound(): void {
+  const entry = read<RoundInProgress | null>(KEYS.inProgress, null)
+  if (!entry) return
+  clearRoundInProgress()
+  saveStreak({ ...loadStreak(), current: 0 })
+  logRound({ at: entry.at, outcome: 'out', turns: Array.isArray(entry.turns) ? entry.turns : [] })
 }
 
 /** A head-to-head seat on this device, so refreshing or reopening the link gets back in. */

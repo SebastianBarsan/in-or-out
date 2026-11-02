@@ -11,7 +11,18 @@ import {
   recordAnswer,
 } from './engine/predictor'
 import { QUESTIONS } from './data'
-import { loadRankHistory, loadRecentIds, loadStreak, logRound, rememberRound, saveStreak } from './storage'
+import {
+  clearRoundInProgress,
+  loadRankHistory,
+  loadRecentIds,
+  loadStreak,
+  logRound,
+  rememberRound,
+  saveRoundInProgress,
+  saveStreak,
+  settleAbandonedRound,
+} from './storage'
+import type { RoundLog } from './storage'
 import type { Turn } from './ui/turn'
 import { HeadToHead } from './ui/h2h/HeadToHead'
 import { StartScreen } from './ui/StartScreen'
@@ -20,10 +31,23 @@ import { ResultScreen } from './ui/ResultScreen'
 
 type Screen = 'start' | 'play' | 'result'
 
+const logTurns = (played: Turn[]): RoundLog['turns'] =>
+  played.map((t) => ({
+    question: t.question.id,
+    answer: t.answer?.id ?? null,
+    rank: t.rank,
+    guess: t.guess.id,
+    caught: t.caught,
+  }))
+
 export function App() {
   const rng = useRef(createRng(randomSeed())).current
   const [screen, setScreen] = useState<Screen>('start')
-  const [streak, setStreak] = useState(loadStreak)
+  // A round left half-played last visit is settled as an OUT before the streak is read.
+  const [streak, setStreak] = useState(() => {
+    settleAbandonedRound()
+    return loadStreak()
+  })
   const [round, setRound] = useState<Question[]>([])
   const [turns, setTurns] = useState<Turn[]>([])
   const [profile, setProfile] = useState(emptyProfile)
@@ -45,6 +69,7 @@ export function App() {
   const startRound = () => {
     const questions = buildRound(QUESTIONS, loadRecentIds(), rng)
     rememberRound(questions.map((q) => q.id))
+    saveRoundInProgress({ at: new Date().toISOString(), turns: [] })
     const fresh = emptyProfile(careerFromHistory(loadRankHistory()))
     setRound(questions)
     setTurns([])
@@ -64,6 +89,7 @@ export function App() {
     setTurns(played)
     // Save the outcome as soon as it's decided, so refreshing during the reveal can't undo an OUT.
     if (caught || current.index === round.length - 1) finishRound(played, caught ? 'out' : 'in')
+    else saveRoundInProgress({ at: new Date().toISOString(), turns: logTurns(played) })
   }
 
   // Running out of time is an OUT. There's no answer to learn from, so the profile stays put.
@@ -85,17 +111,8 @@ export function App() {
         : { current: 0, best: streak.best }
     setStreak(updated)
     saveStreak(updated)
-    logRound({
-      at: new Date().toISOString(),
-      outcome,
-      turns: played.map((t) => ({
-        question: t.question.id,
-        answer: t.answer?.id ?? null,
-        rank: t.rank,
-        guess: t.guess.id,
-        caught: t.caught,
-      })),
-    })
+    logRound({ at: new Date().toISOString(), outcome, turns: logTurns(played) })
+    clearRoundInProgress()
   }
 
   const handleNext = () => {
