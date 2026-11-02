@@ -40,7 +40,7 @@ This mode needs a small Supabase project to hold the games. On the free plan:
 
 Without those variables, Solo works as normal and the tab says head-to-head isn't set up.
 
-A locked prediction is held only in the database, and the database functions are the only way in, so it never reaches the answerer's device before the reveal. The server also enforces the 10-second clock. Both devices check for changes every 3 seconds and get a realtime nudge to make turns feel instant.
+A locked prediction is held only in the database, and the database functions are the only way in, so it never reaches the answerer's device before the reveal. The server also enforces the 10-second clock, and plays a turn left unopened for 2 minutes as a timeout, so a player who walks away can't stall the game. Both devices check for changes every 3 seconds and get a realtime nudge to make turns feel instant.
 
 ## How the guessing works
 

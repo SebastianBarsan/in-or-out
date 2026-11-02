@@ -9,6 +9,7 @@ const MIGRATIONS = [
   '20261031000000_h2h_shrinking_choices.sql',
   '20261101000000_h2h_setter_clock.sql',
   '20261102000000_h2h_check_answers.sql',
+  '20261102000001_h2h_idle_turns.sql',
 ].map((file) => readFileSync(new URL(`./migrations/${file}`, import.meta.url), 'utf8'))
 const POOL = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10']
 // 'p' is the prediction most tests lock, and 'other' the answer that dodges it.
@@ -333,14 +334,73 @@ describe('timer', () => {
     expect(after.history[0]).toMatchObject({ caught: true, answer: null })
   })
 
-  it('waits as long as it takes for an answerer who has not opened the question', async () => {
+  it('waits for an answerer who has not opened the question yet', async () => {
     const game = await start()
     const { host } = game.tokens
     const { choices } = await call('h2h_get_game', game.id, host)
     await call('h2h_lock_prediction', game.id, host, 1, choices[0], 'p')
+    await idleFor(game.id, '119 seconds')
     const view = await call('h2h_get_game', game.id, host)
     expect(view.status).toBe('answering')
     expect(view.answering).toBe(false)
+  })
+})
+
+/** Makes the current turn look like it arrived this long ago. */
+async function idleFor(id: string, ago: string) {
+  await db.exec('reset role')
+  await db.query(`update h2h_private.games set saved_at = now() - $2::interval where id = $1`, [id, ago])
+  await db.exec('set role anon')
+}
+
+describe('idle turns', () => {
+  it('catches an answerer who leaves the question unopened for 2 minutes', async () => {
+    const game = await start()
+    const { host, guest } = game.tokens
+    const { choices } = await call('h2h_get_game', game.id, host)
+    await call('h2h_lock_prediction', game.id, host, 1, choices[0], 'p')
+    await idleFor(game.id, '121 seconds')
+    const after = await call('h2h_get_game', game.id, host)
+    expect(after.history[0]).toMatchObject({ caught: true, answer: null, outcome: 'reply' })
+    expect(after.turn).toBe(2)
+    expect((await call('h2h_start_answer', game.id, guest, 1)).turn).toBe(2)
+  })
+
+  it('plays a random question and prediction for a setter who never opens the turn', async () => {
+    const game = await start()
+    const { host, guest } = game.tokens
+    const { choices } = await call('h2h_get_game', game.id, host)
+    await idleFor(game.id, '121 seconds')
+    const after = await call('h2h_get_game', game.id, guest)
+    expect(after.status).toBe('answering')
+    const seen = await call('h2h_get_game', game.id, host)
+    expect(choices).toContain(seen.questionId)
+    expect(ANSWERS).toContain(seen.prediction)
+  })
+
+  it('gives the answerer a fresh 2 minutes after an idle setter is played for', async () => {
+    const game = await start()
+    await idleFor(game.id, '121 seconds')
+    await call('h2h_get_game', game.id, game.tokens.guest)
+    const view = await call('h2h_get_game', game.id, game.tokens.guest)
+    expect(view.status).toBe('answering')
+    expect(view.history).toHaveLength(0)
+  })
+
+  it('leaves a turn alone once its clock is running', async () => {
+    const game = await start()
+    const { host } = game.tokens
+    await call('h2h_start_choosing', game.id, host, 1)
+    await idleFor(game.id, '121 seconds')
+    const view = await call('h2h_get_game', game.id, host)
+    expect(view.status).toBe('choosing')
+    expect(view.msLeft).toBeGreaterThan(9000)
+  })
+
+  it('leaves a lobby waiting for its guest', async () => {
+    const host = await call<{ id: string; token: string }>('h2h_create_game', 'Ann', POOL, answersFor(POOL))
+    await idleFor(host.id, '1 day')
+    expect((await call('h2h_get_game', host.id, host.token)).status).toBe('lobby')
   })
 })
 
