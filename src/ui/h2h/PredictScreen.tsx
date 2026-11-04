@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AnswerForm } from '../AnswerForm'
 import { TimerBar } from '../TimerBar'
 import { questionById } from './lookup'
@@ -14,6 +14,8 @@ interface Props {
 
 export function PredictScreen({ questionId, opponent, msLeft, onLock, onTimeout }: Props) {
   const [locking, setLocking] = useState(false)
+  // Set when the bar runs out mid-lock, so a lock that then fails still sends the timeout.
+  const expired = useRef(false)
   // Only the first reading sets the timer. Later polls would otherwise keep restarting the bar.
   const [timerMs] = useState(() => Math.max(msLeft, 1))
   const question = questionById(questionId)!
@@ -26,13 +28,22 @@ export function PredictScreen({ questionId, opponent, msLeft, onLock, onTimeout 
         <span className="badge">{question.answers.length} possible answers</span>
       </header>
       {/* Keeps draining during a lock: if the lock fails, the server's clock hasn't stopped either. */}
-      <TimerBar durationMs={timerMs} running onExpire={() => !locking && onTimeout()} />
+      <TimerBar
+        durationMs={timerMs}
+        running
+        onExpire={() => {
+          expired.current = true
+          if (!locking) onTimeout()
+        }}
+      />
       <AnswerForm
         question={question}
         active={!locking}
         onAccept={async (answer) => {
           setLocking(true)
-          if (!(await onLock(answer.id))) setLocking(false)
+          if (await onLock(answer.id)) return
+          setLocking(false)
+          if (expired.current) onTimeout()
         }}
         placeholder={`What will ${opponent} say?`}
         label="Your prediction"

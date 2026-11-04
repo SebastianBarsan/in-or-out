@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { exampleAnswer, seedFrom } from '../../engine/headToHead'
 import { createRng } from '../../engine/rng'
 import type { GameView } from '../../h2h/api'
@@ -16,6 +16,8 @@ interface Props {
 
 export function ChooseScreen({ view, start, onChoose, onTimeout }: Props) {
   const [picking, setPicking] = useState(false)
+  // Set when the bar runs out mid-pick, so a pick that then fails still sends the timeout.
+  const expired = useRef(false)
   const timerMs = useTurnClock(view.msLeft !== null, view.msLeft, start)
   const choices = view.choices.join()
   const cards = useMemo(
@@ -45,7 +47,14 @@ export function ChooseScreen({ view, start, onChoose, onTimeout }: Props) {
       </p>
       <h2 className="prompt">{nameOf(view, view.setter)}, pick a question</h2>
       {/* Keeps draining during a pick: if the pick fails, the server's clock hasn't stopped either. */}
-      <TimerBar durationMs={timerMs} running onExpire={() => !picking && onTimeout()} />
+      <TimerBar
+        durationMs={timerMs}
+        running
+        onExpire={() => {
+          expired.current = true
+          if (!picking) onTimeout()
+        }}
+      />
       <ul className="choices">
         {cards.map(({ question, example }) => (
           <li key={question.id}>
@@ -54,7 +63,9 @@ export function ChooseScreen({ view, start, onChoose, onTimeout }: Props) {
               disabled={picking}
               onClick={async () => {
                 setPicking(true)
-                if (!(await onChoose(question.id))) setPicking(false)
+                if (await onChoose(question.id)) return
+                setPicking(false)
+                if (expired.current) onTimeout()
               }}
             >
               <span className="choice-prompt">{question.prompt}</span>
