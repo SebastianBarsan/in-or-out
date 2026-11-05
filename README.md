@@ -2,7 +2,7 @@
 
 A small trivia game you win by being unpredictable.
 
-**Play it now at [url]**, then send a friend a head-to-head link and see who's harder to read.
+**Play it now at [in-or-out-ol7g.onrender.com](https://in-or-out-ol7g.onrender.com)**, then send a friend a head-to-head link and see who's harder to read.
 
 Each round is five questions like "Name a country in Africa" or "Name a member of the Beatles". Before you type anything, the app quietly locks in its guess of what you'll say and shows it as a face-down card. Then the card flips. If it guessed your answer, you're out. Get through all five and you're in.
 
