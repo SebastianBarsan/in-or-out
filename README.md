@@ -2,6 +2,8 @@
 
 A small trivia game you win by being unpredictable.
 
+**Play it now at [url]**, then send a friend a head-to-head link and see who's harder to read.
+
 Each round is five questions like "Name a country in Africa" or "Name a member of the Beatles". Before you type anything, the app quietly locks in its guess of what you'll say and shows it as a face-down card. Then the card flips. If it guessed your answer, you're out. Get through all five and you're in.
 
 It isn't guessing blindly, though. It watches how you play, both this round and in the rounds before it. Go with the obvious answers and it keeps guessing the obvious ones. Start digging up obscure ones and it follows you into the long tail. The questions also get narrower as you go, from 30-odd possible answers down to three or four, so the last couple are where it usually catches people.
