@@ -35,7 +35,7 @@ The **Compete with friends** tab is head-to-head: you take turns picking a quest
 This mode needs a small Supabase project to hold the games. On the free plan:
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Paste [`supabase/migrations/20261030000000_head_to_head.sql`](supabase/migrations/20261030000000_head_to_head.sql) into its SQL Editor and run it.
+2. Run every file in [`supabase/migrations/`](supabase/migrations/) in its SQL Editor, oldest first. Each later file builds on the ones before it.
 3. Copy `.env.example` to `.env` and fill in the project URL and anon key from its API settings. Set the same two variables on your host if you deploy the site, since they're read at build time.
 
 Without those variables, Solo works as normal and the tab says head-to-head isn't set up.
