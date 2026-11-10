@@ -44,6 +44,10 @@ Without those variables, Solo works as normal and the tab says head-to-head isn'
 
 A locked prediction is held only in the database, and the database functions are the only way in, so it never reaches the answerer's device before the reveal. The server also enforces the 10-second clock, and plays a turn left unopened for 2 minutes as a timeout, so a player who walks away can't stall the game. Both devices check for changes every 3 seconds and get a realtime nudge to make turns feel instant.
 
+## Private stats
+
+With Supabase set up, every finished Solo round adds one row to `stats_private.rounds`. The row holds the outcome, streak, answers, round length, and browser details such as language, timezone, screen size and where the player came from, plus the country. It never stores the IP address. Each browser gets a random player ID, and the nickname is whatever the player last typed for head-to-head. Browsers can add rows but can't read them. To see them, open the Supabase Table Editor and switch to the `stats_private` schema. The `players` view sums up each player. Rounds played on the local dev server aren't sent.
+
 ## How the guessing works
 
 Every answer has a hand-set popularity score between 0 and 1. Within a question, answers are ranked from most common (0) to most obscure (1).

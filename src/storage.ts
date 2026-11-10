@@ -8,6 +8,7 @@ const KEYS = {
   seats: 'in-or-out:h2h-seats',
   name: 'in-or-out:h2h-name',
   inProgress: 'in-or-out:round-in-progress',
+  playerId: 'in-or-out:player-id',
 }
 
 const RECENT_ROUNDS = 3
@@ -89,12 +90,14 @@ export function clearRoundInProgress(): void {
  * A round that was never finished, because the page was refreshed or closed mid-round, counts as
  * an OUT. Otherwise reloading on a hard question would dodge it. Run once when the app loads.
  */
-export function settleAbandonedRound(): void {
+export function settleAbandonedRound(): RoundLog | null {
   const entry = read<RoundInProgress | null>(KEYS.inProgress, null)
-  if (!entry) return
+  if (!entry) return null
   clearRoundInProgress()
   saveStreak({ ...loadStreak(), current: 0 })
-  logRound({ at: entry.at, outcome: 'out', turns: Array.isArray(entry.turns) ? entry.turns : [] })
+  const round: RoundLog = { at: entry.at, outcome: 'out', turns: Array.isArray(entry.turns) ? entry.turns : [] }
+  logRound(round)
+  return round
 }
 
 /** A head-to-head seat on this device, so refreshing or reopening the link gets back in. */
@@ -137,6 +140,20 @@ export function loadPlayerName(): string {
 
 export function savePlayerName(name: string): void {
   write(KEYS.name, name)
+}
+
+/**
+ * A random ID for this browser, so the private stats can tell players apart without knowing who
+ * they are. Made on first use. Null when storage is blocked, since an ID that changes on every
+ * visit would count one person as many.
+ */
+export function loadPlayerId(): string | null {
+  const saved = read<string | null>(KEYS.playerId, null)
+  if (typeof saved === 'string' && saved) return saved
+  if (typeof crypto?.randomUUID !== 'function') return null
+  const id = crypto.randomUUID()
+  write(KEYS.playerId, id)
+  return read<string | null>(KEYS.playerId, null) === id ? id : null
 }
 
 /** Answer ranks from each logged round, oldest first. */

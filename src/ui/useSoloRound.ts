@@ -23,6 +23,7 @@ import {
   settleAbandonedRound,
 } from '../storage'
 import type { RoundLog } from '../storage'
+import { sendRoundStats } from '../stats'
 import type { Turn } from './turn'
 
 export type SoloScreen = 'start' | 'play' | 'result'
@@ -43,14 +44,17 @@ export function useSoloRound() {
   // A round left half-played last visit is settled as an OUT before the streak is read.
   // Running this twice is harmless: the second call finds nothing left to settle.
   const [streak, setStreak] = useState(() => {
-    settleAbandonedRound()
-    return loadStreak()
+    const abandoned = settleAbandonedRound()
+    const settled = loadStreak()
+    if (abandoned) sendRoundStats({ round: abandoned, streak: 0, bestStreak: settled.best, durationMs: null, abandoned: true })
+    return settled
   })
   const [round, setRound] = useState<Question[]>([])
   const [turns, setTurns] = useState<Turn[]>([])
   const [profile, setProfile] = useState(emptyProfile)
   // The guess is chosen here, in the event that moves to a new question, and never recomputed.
   const [current, setCurrent] = useState<{ index: number; guess: Answer } | null>(null)
+  const startedAt = useRef(0)
   // Re-read on every screen change so the start screen reflects the round just logged.
   const career = useMemo(() => careerFromHistory(loadRankHistory()), [screen])
 
@@ -64,6 +68,7 @@ export function useSoloRound() {
     setProfile(fresh)
     setCurrent({ index: 0, guess: chooseGuess(questions[0], fresh, rng) })
     setScreen('play')
+    startedAt.current = performance.now()
   }
 
   const finish = (played: Turn[], outcome: 'in' | 'out') => {
@@ -73,8 +78,15 @@ export function useSoloRound() {
         : { current: 0, best: streak.best }
     setStreak(updated)
     saveStreak(updated)
-    logRound({ at: new Date().toISOString(), outcome, turns: logTurns(played) })
+    const entry: RoundLog = { at: new Date().toISOString(), outcome, turns: logTurns(played) }
+    logRound(entry)
     clearRoundInProgress()
+    sendRoundStats({
+      round: entry,
+      streak: updated.current,
+      bestStreak: updated.best,
+      durationMs: performance.now() - startedAt.current,
+    })
   }
 
   const answer = (picked: Answer) => {
