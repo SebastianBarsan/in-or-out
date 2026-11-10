@@ -1748,35 +1748,6 @@
     ]
   },
   {
-    "id": "mediterranean",
-    "prompt": "Name a country with a Mediterranean coastline",
-    "tier": "L",
-    "category": "geography",
-    "answers": [
-      {"id": "italy", "name": "Italy", "pop": 0.9},
-      {"id": "spain", "name": "Spain", "pop": 0.87},
-      {"id": "france", "name": "France", "pop": 0.83},
-      {"id": "greece", "name": "Greece", "pop": 0.8},
-      {"id": "turkey", "name": "Turkey", "aliases": ["Türkiye"], "pop": 0.76},
-      {"id": "egypt", "name": "Egypt", "pop": 0.73},
-      {"id": "croatia", "name": "Croatia", "pop": 0.69},
-      {"id": "israel", "name": "Israel", "pop": 0.66},
-      {"id": "morocco", "name": "Morocco", "pop": 0.62},
-      {"id": "cyprus", "name": "Cyprus", "pop": 0.59},
-      {"id": "malta", "name": "Malta", "pop": 0.55},
-      {"id": "lebanon", "name": "Lebanon", "pop": 0.52},
-      {"id": "tunisia", "name": "Tunisia", "pop": 0.48},
-      {"id": "libya", "name": "Libya", "pop": 0.45},
-      {"id": "algeria", "name": "Algeria", "pop": 0.41},
-      {"id": "monaco", "name": "Monaco", "pop": 0.38},
-      {"id": "syria", "name": "Syria", "pop": 0.34},
-      {"id": "albania", "name": "Albania", "pop": 0.31},
-      {"id": "montenegro", "name": "Montenegro", "pop": 0.27},
-      {"id": "slovenia", "name": "Slovenia", "pop": 0.24},
-      {"id": "bosnia-and-herzegovina", "name": "Bosnia and Herzegovina", "aliases": ["Bosnia"], "pop": 0.2}
-    ]
-  },
-  {
     "id": "summer-olympics-hosts",
     "prompt": "Name a country that has hosted the Summer Olympics",
     "tier": "L",
