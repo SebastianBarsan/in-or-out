@@ -44,6 +44,11 @@ function browserDetails() {
   }
 }
 
+/** This browser's player ID for stats, or null where stats are off (local dev, no backend). */
+export function statsPlayerId(): string | null {
+  return ENABLED ? loadPlayerId() : null
+}
+
 export interface RoundStats {
   round: RoundLog
   streak: number

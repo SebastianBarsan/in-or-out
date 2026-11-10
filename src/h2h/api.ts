@@ -1,6 +1,7 @@
 // The only code that talks to the backend. The client library loads on demand, so Solo players
 // never download it and the game still runs with no backend configured.
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
+import { statsPlayerId } from '../stats'
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -67,9 +68,10 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 }
 
 export const createGame = (name: string, pool: string[], answers: Record<string, string[]>) =>
-  rpc<Seat>('h2h_create_game', { p_name: name, p_pool: pool, p_answers: answers })
+  rpc<Seat>('h2h_create_game', { p_name: name, p_pool: pool, p_answers: answers, p_player: statsPlayerId() })
 
-export const joinGame = (game: string, name: string) => rpc<Seat>('h2h_join_game', { p_game: game, p_name: name })
+export const joinGame = (game: string, name: string) =>
+  rpc<Seat>('h2h_join_game', { p_game: game, p_name: name, p_player: statsPlayerId() })
 
 export const getGame = (game: string, token: string | null) =>
   rpc<GameView>('h2h_get_game', { p_game: game, p_token: token })

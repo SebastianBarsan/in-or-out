@@ -48,6 +48,8 @@ A locked prediction is held only in the database, and the database functions are
 
 With Supabase set up, every finished Solo round adds one row to `stats_private.rounds`. The row holds the outcome, streak, answers, round length, and browser details such as language, timezone, screen size and where the player came from, plus the country. It never stores the IP address. Each browser gets a random player ID, and the nickname is whatever the player last typed for head-to-head. Browsers can add rows but can't read them. To see them, open the Supabase Table Editor and switch to the `stats_private` schema. The `players` view sums up each player. Rounds played on the local dev server aren't sent.
 
+Every finished head-to-head game adds one row to `stats_private.h2h_games`: both names, who won, turns played, catches, timeouts, sudden death, the full turn history, how long it took, which game it was a rematch of, and each player's country. The database writes this row itself when a game ends, so timeouts and players who walk away count too. Each player's browser ID is stored as `host_player_id` and `guest_player_id`, the same ID their Solo rounds use. Games from the local dev server are still logged, but without player IDs.
+
 ## How the guessing works
 
 Every answer has a hand-set popularity score between 0 and 1. Within a question, answers are ranked from most common (0) to most obscure (1).
